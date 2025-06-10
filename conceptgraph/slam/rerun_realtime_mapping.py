@@ -110,7 +110,7 @@ def main(cfg : DictConfig):
     orr = OptionalReRun()
     orr.set_use_rerun(cfg.use_rerun)
     orr.init("realtime_mapping")
-    orr.spawn()
+    orr.spawn(memory_limit='85%')
 
     owandb = OptionalWandB()
     owandb.set_use_wandb(cfg.use_wandb)
@@ -266,6 +266,10 @@ def main(cfg : DictConfig):
                 class_id=detection_class_ids,
                 mask=masks_np,
             )
+
+            if curr_det.xyxy.shape[0] == 0:
+                print(f"No detections found for frame {frame_idx}.")
+                continue
             
             # Make the edges
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_labels, det_exp_vis_path, color_path, cfg.make_edges, openai_client)
@@ -330,11 +334,11 @@ def main(cfg : DictConfig):
         
         prev_adjusted_pose = orr_log_camera(intrinsics, adjusted_pose, prev_adjusted_pose, cfg.image_width, cfg.image_height, frame_idx)
         
-        orr_log_rgb_image(color_path)
-        orr_log_annotated_image(color_path, det_exp_vis_path)
-        orr_log_depth_image(depth_tensor)
-        orr_log_vlm_image(vis_save_path_for_vlm)
-        orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
+        # orr_log_rgb_image(color_path)
+        # orr_log_annotated_image(color_path, det_exp_vis_path)
+        # orr_log_depth_image(depth_tensor)
+        # orr_log_vlm_image(vis_save_path_for_vlm)
+        # orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
 
         # resize the observation if needed
         resized_gobs = resize_gobs(raw_gobs, image_rgb)
@@ -445,25 +449,30 @@ def main(cfg : DictConfig):
             most_common_class_name = obj_classes.get_classes_arr()[most_common_class_id]
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
-
-        map_edges = process_edges(match_indices, gobs, len(objects), objects, map_edges, frame_idx)
+        
         is_final_frame = frame_idx == len(dataset) - 1
-        if is_final_frame:
-            print("Final frame detected. Performing final post-processing...")
+        if cfg.make_edges:
+            map_edges = process_edges(match_indices, gobs, len(objects), objects, map_edges, frame_idx)
+            
+            if is_final_frame:
+                print("Final frame detected. Performing final post-processing...")
 
-        # Clean up outlier edges
-        edges_to_delete = []
-        for curr_map_edge in map_edges.edges_by_index.values():
-            curr_obj1_idx = curr_map_edge.obj1_idx
-            curr_obj2_idx = curr_map_edge.obj2_idx
-            obj1_class_name = objects[curr_obj1_idx]['class_name'] 
-            obj2_class_name = objects[curr_obj2_idx]['class_name']
-            curr_first_detected = curr_map_edge.first_detected
-            curr_num_det = curr_map_edge.num_detections
-            if (frame_idx - curr_first_detected > 5) and curr_num_det < 2:
-                edges_to_delete.append((curr_obj1_idx, curr_obj2_idx))
-        for edge in edges_to_delete:
-            map_edges.delete_edge(edge[0], edge[1])
+            # Clean up outlier edges
+            if cfg.remove_outlier_edges:
+                edges_to_delete = []
+                for curr_map_edge in map_edges.edges_by_index.values():
+                    curr_obj1_idx = curr_map_edge.obj1_idx
+                    curr_obj2_idx = curr_map_edge.obj2_idx
+                    rel_type = curr_map_edge.rel_type
+                    obj1_class_name = objects[curr_obj1_idx]['class_name'] 
+                    obj2_class_name = objects[curr_obj2_idx]['class_name']
+                    curr_first_detected = curr_map_edge.first_detected
+                    curr_num_det = curr_map_edge.num_detections
+                    if (frame_idx - curr_first_detected > 5) and curr_num_det < 2:
+                        edges_to_delete.append((curr_obj1_idx, curr_obj2_idx))
+                for edge in edges_to_delete:
+                    map_edges.delete_edge(edge[0], edge[1])
+
         ### Perform post-processing periodically if told so
 
         # Denoising
@@ -519,7 +528,8 @@ def main(cfg : DictConfig):
                 map_edges=map_edges
             )
         orr_log_objs_pcd_and_bbox(objects, obj_classes)
-        orr_log_edges(objects, map_edges, obj_classes)
+        if cfg.make_edges:
+            orr_log_edges(objects, map_edges, obj_classes)
 
         if cfg.save_objects_all_frames:
             save_objects_for_frame(
@@ -585,6 +595,9 @@ def main(cfg : DictConfig):
     
     # Consolidate captions 
     for object in objects:
+        if len(object['captions']) == 0:
+            object['consolidated_caption'] = ""
+            continue
         obj_captions = object['captions'][:20]
         consolidated_caption = consolidate_captions(openai_client, obj_captions)
         object['consolidated_caption'] = consolidated_caption
@@ -611,12 +624,13 @@ def main(cfg : DictConfig):
             objects=objects
         )
         
-        save_edge_json(
-            exp_suffix=cfg.exp_suffix,
-            exp_out_path=exp_out_path,
-            objects=objects,
-            edges=map_edges
-        )
+        if cfg.make_edges:
+            save_edge_json(
+                exp_suffix=cfg.exp_suffix,
+                exp_out_path=exp_out_path,
+                objects=objects,
+                edges=map_edges
+            )
 
     # Save metadata if all frames are saved
     if cfg.save_objects_all_frames:

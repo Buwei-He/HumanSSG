@@ -202,7 +202,9 @@ def vis_result_fast_on_depth(
     depth_image: np.ndarray, 
     detections: sv.Detections, 
     classes: list[str], 
-    color: Color | ColorPalette = ColorPalette.default(), 
+    ## Modified 2025/05/20
+    # color: Color | ColorPalette = ColorPalette.default(), 
+    color: Color | ColorPalette = ColorPalette.DEFAULT,
     instance_random_color: bool = False,
     draw_bbox: bool = True,
 ) -> np.ndarray:
@@ -211,7 +213,9 @@ def vis_result_fast_on_depth(
     This is fast but of the same resolution of the input image, thus can be blurry. 
     '''
     # annotate image with detections
-    box_annotator = sv.BoxAnnotator(
+    ## Modified 2025/05/20
+    # box_annotator = sv.BoxAnnotator(
+    box_annotator = sv.LabelAnnotator(
         color = color,
         text_scale=0.3,
         text_thickness=1,
@@ -462,7 +466,9 @@ def vis_result_for_vlm(
     image: np.ndarray, 
     detections: sv.Detections, 
     labels: list[str], 
-    color: Color | ColorPalette = ColorPalette.default(), 
+    ## Modified 2025/05/20
+    # color: Color | ColorPalette = ColorPalette.default(), 
+    color: Color | ColorPalette = ColorPalette.DEFAULT,
     draw_bbox: bool = True,
     thickness: int = 2,
     text_scale: float = 0.3,
@@ -497,7 +503,9 @@ def vis_result_fast(
     image: np.ndarray, 
     detections: sv.Detections, 
     classes: list[str], 
-    color: Color | ColorPalette = ColorPalette.default(), 
+    ## Modified 2025/05/20
+    # color: Color | ColorPalette = ColorPalette.default(), 
+    color: Color | ColorPalette = ColorPalette.DEFAULT,
     instance_random_color: bool = False,
     draw_bbox: bool = True,
 ) -> np.ndarray:
@@ -506,7 +514,9 @@ def vis_result_fast(
     This is fast but of the same resolution of the input image, thus can be blurry. 
     '''
     # annotate image with detections
-    box_annotator = sv.BoxAnnotator(
+    ## Modified 2025/05/20
+    # box_annotator = sv.BoxAnnotator(
+    box_annotator = sv.LabelAnnotator(
         color = color,
         text_scale=0.3,
         text_thickness=1,

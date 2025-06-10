@@ -40,6 +40,54 @@
             "justMyCode": false
         },
         {
+            "name": "visualize_cfslam_results_modified",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/conceptgraph/scripts/visualize_cfslam_results_modified.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--result_path", "${workspaceFolder}/latest_pcd_save",
+                "--edge_file", "/home/hackathon/Programming/nice-slam/Datasets/Custom/Map1/exps/r_mapping_Map1_stride5/edge_json_r_mapping_Map1_stride5.json"
+            ],
+            "justMyCode": false
+        },
+        {
+            "name": "visualize_scene_graph",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/conceptgraph/scripts/visualize_scene_graph.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--result_path", "${workspaceFolder}/latest_pcd_save",
+                "--edge_file", "/home/hackathon/Programming/nice-slam/Datasets/Custom/Map1/exps/r_mapping_Map1_stride5/edge_json_r_mapping_Map1_stride5.json"
+            ],
+            "justMyCode": false
+        },
+        {
+            "name": "visualize_scene_graph(interactive)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/conceptgraph/scripts/visualize_scene_graph.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "args": [
+                "--result_path", "/home/hackathon/Programming/nice-slam/Datasets/Custom/Map1/exps/r_mapping_Map1_stride5/pcd_r_mapping_Map1_stride5.pkl.gz",
+                "--edge_file", "/home/hackathon/Programming/nice-slam/Datasets/Custom/Map1/exps/r_mapping_Map1_stride5/edge_interactive_Map1.json"
+            ],
+            "justMyCode": false
+        },
+        {
+            "name": "extract_json",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/conceptgraph/scripts/extract_json.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "iPhone Record3D Stream Rerun Realtime Mapping",
             "type": "debugpy",
             "request": "launch",

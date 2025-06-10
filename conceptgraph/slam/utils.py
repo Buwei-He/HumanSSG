@@ -793,7 +793,7 @@ def merge_objects(
     if do_edges:
         return objects, map_edges
     else:
-        return objects
+        return objects, None
     
 def filter_captions(captions, detection_class_labels):
     # Create a dictionary to map id to the index in the captions list
@@ -885,9 +885,11 @@ def filter_gobs(
             gobs[attribute] = gobs[attribute][idx_to_keep]
         else:
             raise NotImplementedError(f"Unhandled type {type(gobs[attribute])}")
-        
-    filtered_captions = filter_captions(gobs['captions'], gobs['detection_class_labels'])
-    gobs['captions'] = filtered_captions
+
+    # Modified 2025/05/21: Handle the case where captions are None
+    if gobs['captions'] is not None:    
+        filtered_captions = filter_captions(gobs['captions'], gobs['detection_class_labels'])
+        gobs['captions'] = filtered_captions
 
     return gobs
 
@@ -1095,7 +1097,7 @@ def make_detection_list_from_pcd_and_gobs(
             'color_path' : [color_path],                     # path to the RGB image
             'class_name' : curr_class_name,                         # global class id for this detection
             'class_id' : [curr_class_idx],                         # global class id for this detection
-            'captions' : [gobs['captions'][mask_idx]],           # captions for this detection
+            'captions' : [gobs['captions'][mask_idx]] if gobs['captions'] is not None else [],           # captions for this detection
             'num_detections' : 1,                            # number of detections in this object
             'mask': [gobs['mask'][mask_idx]],
             'xyxy': [gobs['xyxy'][mask_idx]],

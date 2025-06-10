@@ -1,0 +1,8 @@
+defaults:
+  - base_paths
+
+# dataset_root: ${data_root}/Custom
+dataset_root: ${data_root}/HumanSSG
+dataset_config: ${repo_root}/conceptgraph/dataset/dataconfigs/custom/custom.yaml
+scene_id: Map2
+render_camera_path: ${repo_root}/conceptgraph/dataset/dataconfigs/custom/custom_human_maps.json

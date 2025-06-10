@@ -11,7 +11,7 @@ from conceptgraph.slam.utils import prepare_objects_save_vis
 from conceptgraph.utils.ious import mask_subtract_contained
 import supervision as sv
 import scipy.ndimage as ndi 
-from conceptgraph.utils.vlm import get_obj_captions_from_image_gpt4v, get_obj_rel_from_image_gpt4v, vlm_extract_object_captions
+from conceptgraph.utils.vlm import get_behaviour_from_image_gpt4v, get_obj_captions_from_image_gpt4v, get_obj_rel_from_image_gpt4v, vlm_extract_object_captions
 import cv2
 import re
 
@@ -441,8 +441,8 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_la
         confidence_threshold=0.00001,
         given_labels=detection_class_labels,
     )
-    
-    edges = []
+    ## Modified 2025/05/21: local variable 'captions' referenced before assignment if make_edges_flag is False
+    edges, captions = [], []
     edge_image = None
     if make_edges_flag:
         vis_save_path_for_vlm = get_vlm_annotated_image_path(det_exp_vis_path, color_path)
@@ -460,7 +460,11 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_la
         print(f"Line 313, vis_save_path_for_vlm: {vis_save_path_for_vlm}")
         
         edges = get_obj_rel_from_image_gpt4v(openai_client, vis_save_path_for_vlm, label_list)
-        captions = get_obj_captions_from_image_gpt4v(openai_client, vis_save_path_for_vlm, label_list)
+        behaviours = get_behaviour_from_image_gpt4v(openai_client, vis_save_path_for_vlm, label_list)
+        # check edges and behaviours, filter only contains extract tuples with 3 elements, 1st and 3rd elements are string can be converted to number, 2nd element is string
+        edges = edges + behaviours
+        edges = [edge for edge in edges if isinstance(edge, tuple) and len(edge) == 3 and edge[0].isdigit() and edge[2].isdigit()]
+        # captions = get_obj_captions_from_image_gpt4v(openai_client, vis_save_path_for_vlm, label_list)
         edge_image = plot_edges_from_vlm(annotated_image_for_vlm, edges, filtered_detections, obj_classes, labels, sorted_indices, save_path=vis_save_path_for_vlm_edges)
     
     return labels, edges, edge_image, captions

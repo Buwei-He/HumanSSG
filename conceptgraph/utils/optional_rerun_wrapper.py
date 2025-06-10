@@ -3,6 +3,7 @@ import os
 
 from conceptgraph.utils.general_utils import find_existing_image_path
 from conceptgraph.utils.geometry import rotation_matrix_to_quaternion
+import rerun as rr
 import numpy as np
 
 class OptionalReRun:
@@ -68,7 +69,7 @@ def orr_log_camera(intrinsics, adjusted_pose, prev_adjusted_pose, img_width, img
     quaternion = rotation_matrix_to_quaternion(adjusted_pose[:3, :3])
     orr.log(
         "world/camera",
-        orr.Transform3D(translation=translation, rotation=quaternion, from_parent=False)
+        orr.Transform3D(translation=translation, rotation=rr.Quaternion(xyzw=quaternion), from_parent=False)
     )
 
     # Log trajectory if not the first frame
