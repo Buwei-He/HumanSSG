@@ -1,0 +1,7 @@
+dataset_root: /home/hackathon/Programming/nice-slam/Datasets/HumanSSG
+# dataset_root: /home/hackathon/Programming/nice-slam/Datasets/Custom
+scene_id: Map2
+stride: 5
+result_path: ${dataset_root}/${scene_id}/exps/r_mapping_${scene_id}_stride${stride}/pcd_r_mapping_${scene_id}_stride${stride}.pkl.gz
+# edge_file: ${dataset_root}/${scene_id}/exps/r_mapping_${scene_id}_stride${stride}/edge_interactive_${scene_id}.json
+edge_file: ${dataset_root}/${scene_id}/exps/r_mapping_${scene_id}_stride${stride}/edge_json_r_mapping_${scene_id}_stride${stride}.json

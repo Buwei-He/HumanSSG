@@ -59,10 +59,10 @@
             "program": "${workspaceFolder}/conceptgraph/scripts/visualize_scene_graph.py",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
-            "args": [
-                "--result_path", "${workspaceFolder}/latest_pcd_save",
-                "--edge_file", "/home/hackathon/Programming/nice-slam/Datasets/Custom/Map1/exps/r_mapping_Map1_stride5/edge_json_r_mapping_Map1_stride5.json"
-            ],
+            // "args": [
+            //     "--result_path", "/home/hackathon/Programming/nice-slam/Datasets/HumanSSG/Map2/exps/r_mapping_Map2_stride5/pcd_r_mapping_Map2_stride5.pkl.gz",
+            //     "--edge_file", "/home/hackathon/Programming/nice-slam/Datasets/HumanSSG/Map2/exps/r_mapping_Map2_stride5/edge_json_r_mapping_Map2_stride5.json"
+            // ],
             "justMyCode": false
         },
         {
@@ -72,11 +72,11 @@
             "program": "${workspaceFolder}/conceptgraph/scripts/visualize_scene_graph.py",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
-            "args": [
-                "--result_path", "/home/hackathon/Programming/nice-slam/Datasets/Custom/Map1/exps/r_mapping_Map1_stride5/pcd_r_mapping_Map1_stride5.pkl.gz",
-                "--edge_file", "/home/hackathon/Programming/nice-slam/Datasets/Custom/Map1/exps/r_mapping_Map1_stride5/edge_interactive_Map1.json"
-            ],
-            "justMyCode": false
+            // "args": [
+            //     "--result_path", "/home/hackathon/Programming/nice-slam/Datasets/HumanSSG/Map2/exps/r_mapping_Map2_stride5/pcd_r_mapping_Map2_stride5.pkl.gz",
+            //     "--edge_file", "/home/hackathon/Programming/nice-slam/Datasets/HumanSSG/Map2/exps/r_mapping_Map2_stride5/edge_interactive_Map2.json"
+            // ],
+            "justMyCode": false,
         },
         {
             "name": "extract_json",

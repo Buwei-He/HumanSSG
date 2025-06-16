@@ -463,7 +463,6 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_la
         behaviours = get_behaviour_from_image_gpt4v(openai_client, vis_save_path_for_vlm, label_list)
         # check edges and behaviours, filter only contains extract tuples with 3 elements, 1st and 3rd elements are string can be converted to number, 2nd element is string
         edges = edges + behaviours
-        edges = [edge for edge in edges if isinstance(edge, tuple) and len(edge) == 3 and edge[0].isdigit() and edge[2].isdigit()]
         # captions = get_obj_captions_from_image_gpt4v(openai_client, vis_save_path_for_vlm, label_list)
         edge_image = plot_edges_from_vlm(annotated_image_for_vlm, edges, filtered_detections, obj_classes, labels, sorted_indices, save_path=vis_save_path_for_vlm_edges)
     

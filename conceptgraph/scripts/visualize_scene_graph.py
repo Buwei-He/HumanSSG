@@ -96,8 +96,12 @@ def visualize_scene_graph(result_path, edge_file):
         id2 = edge.get("object_2_id")
         description = edge.get("edge_description", "")
         relation = edge.get("relationship", ""),
+        relation_filter = [
+            "on_top_of", "under", "left_of", "right_of", 
+            "in_front_of", "behind", "next_to", "near"
+        ]
 
-        if id1 not in obj_id_to_node_data_map or id2 not in obj_id_to_node_data_map:
+        if id1 not in obj_id_to_node_data_map or id2 not in obj_id_to_node_data_map or relation[0] in relation_filter:
             continue
 
         center1 = obj_id_to_node_data_map[id1]["center_3d"]
@@ -117,7 +121,7 @@ def visualize_scene_graph(result_path, edge_file):
         # add 3d label for edges on the midpoint
         midpoint = (center1 + center2) / 2
         if np.any([np.all(row == midpoint) for row in registered_points]):
-            midpoint[1] += 0.1  # Adjust y-coordinate to avoid overlap
+            midpoint[1] += 0.2  # Adjust y-coordinate to avoid overlap
             print(f"Adjusted midpoint to avoid overlap: {midpoint}")
         registered_points.append(midpoint)
 
@@ -129,15 +133,30 @@ def visualize_scene_graph(result_path, edge_file):
 
 
 if __name__ == "__main__":
-    import argparse
+    # import argparse
 
-    parser = argparse.ArgumentParser(description="Visualize Scene Graph")
-    parser.add_argument("--result_path", type=str, required=True, help="Path to the result file")
-    parser.add_argument("--edge_file", type=str, required=True, help="Path to the edge file")
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description="Visualize Scene Graph")
+    # parser.add_argument("--result_path", type=str, required=True, help="Path to the result file")
+    # parser.add_argument("--edge_file", type=str, required=True, help="Path to the edge file")
+    # args = parser.parse_args()
+
+    # load config from yaml config /home/hackathon/Programming/concept-graphs-alidev/conceptgraph/configs/humanssg.yaml
+    import omegaconf
+    config_path = "/home/hackathon/Programming/concept-graphs-alidev/conceptgraph/configs/humanssg.yaml"
+    with open(config_path, "r") as f:
+        config = omegaconf.OmegaConf.load(f)
+        config = omegaconf.OmegaConf.to_container(config, resolve=True)
+
+    print("\n=== Configuration Check ===\n")
+    import pprint
+    pprint.pp(config)
+    print("\n")
+
+    # Wait for user confirmation
+    input("Press Enter to continue or Ctrl+C to abort...")
 
     node_geometries, edge_geometries, rgb_pcd, labels = visualize_scene_graph(
-        args.result_path, args.edge_file
+        config.get("result_path"), config.get("edge_file")
     )
 
     app = o3d.visualization.gui.Application.instance

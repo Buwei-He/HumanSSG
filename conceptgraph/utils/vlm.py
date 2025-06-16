@@ -5,222 +5,14 @@ import base64
 
 from PIL import Image
 import numpy as np
+from pydantic import BaseModel, Field # Import Pydantic
+from typing import List, Literal # Import typing helpers
 
 import ast
 import re
 
-system_prompt_1 = '''
-You are an agent specialized in describing the spatial relationships between objects in an annotated image.
 
-You will be provided with an annotated image and a list of labels for the annotations. Your task is to determine the spatial relationships between the annotated objects in the image, and return a list of these relationships in the correct list of tuples format as follows:
-[("object1", "spatial relationship", "object2"), ("object3", "spatial relationship", "object4"), ...]
-
-Your options for the spatial relationship are "on top of" and "next to".
-
-For example, you may get an annotated image and a list such as 
-["cup 3", "book 4", "clock 5", "table 2", "candle 7", "music stand 6", "lamp 8"]
-
-Your response should be a description of the spatial relationships between the objects in the image. 
-An example to illustrate the response format:
-[("book 4", "on top of", "table 2"), ("cup 3", "next to", "book 4"), ("lamp 8", "on top of", "music stand 6")]
-'''
-
-'''
-You are an agent specialized in identifying and describing objects that are placed "on top of" each other in an annotated image. You always output a list of tuples that describe the "on top of" spatial relationships between the objects, and nothing else. When in doubt, output an empty list.
-
-When provided with an annotated image and a corresponding list of labels for the annotations, your primary task is to determine and return the "on top of" spatial relationships between the annotated objects. Your responses should be formatted as a list of tuples, specifically highlighting objects that rest on top of others, as follows:
-[("object1", "on top of", "object2"), ...]
-'''
-
-# Only deal with the "on top of" relation
-system_prompt_only_top = '''
-You are an agent specializing in identifying the physical and spatial relationships in annotated images for 3D mapping.
-
-In the images, each object is annotated with a bright numeric id (i.e. a number) and a corresponding colored contour outline. Your task is to analyze the images and output a list of tuples describing the physical relationships between objects. Format your response as follows: [("1", "relation type", "2"), ...]. When uncertain, return an empty list.
-
-Note that you are describing the **physical relationships** between the **objects inside** the image.
-
-You will also be given a text list of the numeric ids of the objects in the image. The list will be in the format: ["1: name1", "2: name2", "3: name3" ...], only output the physical relationships between the objects in the list.
-
-The relation types you must report are:
-- phyically placed on top of: ("object x", "on top of", "object y") 
-- phyically placed underneath: ("object x", "under", "object y") 
-
-An illustrative example of the expected response format might look like this:
-[("object 1", "on top of", "object 2"), ("object 3", "under", "object 2"), ("object 4", "on top of", "object 3")]. Do not put the names of the objects in your response, only the numeric ids.
-
-Do not include any other information in your response. Only output a parsable list of tuples describing the given physical relationships between objects in the image.
-'''
-
-# system_prompt_edge_custom = '''
-# You are an agent specializing in identifying the physical and spatial relationships in annotated images for 3D mapping.
-
-# In the images, each object is annotated with a bright numeric id (i.e. a number) and a corresponding colored contour outline. Your task is to analyze the images and output a list of tuples describing the physical relationships between objects. Format your response as follows: [("1", "relation type", "2"), ...]. 
-
-# Note that you are describing the **physical relationships** between the **objects annotated inside** the image. 
-
-# You will also be given a text list of the numeric ids of the objects in the image. The list will be in the format: ["1: name1", "2: name2", "3: name3" ...], only output the physical relationships between the objects in the list.
-
-# Strive to find all applicable behaviors for each relevant pair of objects. When multiple behavior types could apply, prefer the most specific and informative one. Only return an empty list if you are really unsure about it.
-
-# The relation types you must report are:
-# - phyically placed on top of: ("object x", "on top of", "object y") 
-# - phyically placed underneath: ("object x", "under", "object y") 
-# - phyically on the left of: ("object x", "left_of", "object y")
-# - phyically on the right of: ("object x", "right_of", "object y")
-# - phyically in front of: ("object x", "in_front_of", "object y")
-# - phyically behind: ("object x", "behind", "object y")
-# - phyically in close proximity, often side-by-side: ("object x", "next_to", "object y")
-# - physically within a short 3D spatial distance: ("object x", "near", "object y")
-
-# An illustrative example of the expected response format using these relation types might look like this, a list of tuples, assuming objects "13" (laptop), "6" (desk), "25" (mat), "2" (coffee table), "7" (person), "0" (potted plant), "31" (window), "18" (ceiling light):
-# [("13", "on_top_of", "6"), ("25", "under", "2"), ("7", "next_to", "2"), ("0", "near", "31"), ("18", "above", "2"), ("6", "right_of", "7")]
-
-# Do not include any other information, explanations, or introductory text in your response. Only output the Python-parsable list of tuples. When uncertain about any specific relationship between a pair of objects after careful analysis, do not include that specific tuple in your list. If, after careful analysis of the entire image, no relationships from the list can be confidently determined between any pair of annotated objects, then return an empty list `[]`.
-# '''
-
-# # * 'on_top_of': Object X is directly supported by the upper surface of object Y. (e.g., a laptop on a desk).
-# # * 'underneath': Object X is located directly beneath object Y. This may mean Y is supported by X (if X is a supporting part), or X is positioned on a surface/ground directly under Y. (e.g., a mat underneath a table, the legs underneath a tabletop if considered separate objects).
-# # * 'above': Object X is at a significantly higher vertical position than object Y, without being in direct physical contact or a direct support relationship. (e.g., a ceiling light above a table).
-# # * 'below': Object X is at a significantly lower vertical position than object Y, without being in direct physical contact or a direct support relationship. (e.g., a discarded paper below a desk).
-# # * 'left_of': From the camera's primary viewpoint in the image, object X is predominantly to the left of object Y.
-# # * 'right_of': From the camera's primary viewpoint in the image, object X is predominantly to the right of object Y.
-# # * 'in_front_of': From the camera's primary viewpoint, object X is predominantly closer to the camera than object Y. If they were aligned on the viewing axis, X might partially obscure Y.
-# # * 'behind': From the camera's primary viewpoint, object X is predominantly further from the camera than object Y. If they were aligned on the viewing axis, Y might partially obscure X.
-# # * 'next_to': Object X and object Y are in close proximity, often side-by-side (on a similar horizontal plane or supporting surface), without significant visual overlap along the line of sight between them. This describes general adjacency.
-# # * 'touching': Object X and object Y are in direct physical contact. Use this when the primary nature of their interaction is contact itself, and not better or more specifically described by a support relationship like 'on_top_of' or 'underneath'. (e.g., a person leaning on a wall, books touching side-by-side on a shelf).
-# # * 'near': Object X is in the general vicinity of object Y (within a short distance relative to object sizes or scene context). Use this for proximity when objects are close but not necessarily 'touching' or specifically 'next_to' each other.
-# # * 'inside': Object X is mostly or fully enclosed within the boundaries or volume of object Y. (e.g., a remote control inside a drawer, food inside a refrigerator).
-
-system_prompt_edge_custom = '''
-# ROLE
-You are an agent specializing in 3D spatial relationship analysis for 3D mapping and understanding.
-
-# INPUT
-You will receive:
-1. An annotated image where each object has a bright numeric ID and colored contour outline
-2. A list of objects in format: ["1: object_name", "2: object_name", ...]
-
-# TASK
-Analyze the image and identify physical spatial relationships between annotated objects. Output a Python list of relationship tuples.
-
-# OUTPUT FORMAT
-The output must be a list of tuples in the format:
-[("source_id1", "relationship_type1", "target_id1"), ...]
-
-Example: [("13", "on_top_of", "6"), ("25", "under", "2"), ("7", "next_to", "2")]
-
-# RELATIONSHIP TYPES
-Use exactly these relationship labels:
-
-**Vertical Relationships:**
-- "on_top_of": Object X is physically supported by the upper surface of object Y
-- "under": Object X is positioned directly beneath object Y (may or may not be in contact)
-
-**Horizontal Relationships (from camera viewpoint):**
-- "left_of": Object X is predominantly to the left of object Y
-- "right_of": Object X is predominantly to the right of object Y
-
-**Depth Relationships (from camera viewpoint):**
-- "in_front_of": Object X is closer to the camera than object Y
-- "behind": Object X is further from the camera than object Y
-
-**Proximity Relationships:**
-- "next_to": Objects are adjacent/side-by-side on similar horizontal plane
-- "near": Objects are within close spatial proximity but not necessarily adjacent
-
-# ANALYSIS GUIDELINES
-1. **Precision**: Only include relationships you can confidently determine from visual evidence
-2. **Specificity**: Choose the most specific relationship type when multiple apply
-3. **Completeness**: Analyze all possible object pairs systematically
-4. **Perspective**: Use the camera's viewpoint as reference for directional relationships
-
-# CONSTRAINTS
-- Only analyze objects from the provided list
-- Use exact numeric IDs (no quotes around numbers in relationships)
-- Return empty list [] if no relationships can be confidently determined
-- Output must be valid Python syntax
-- No explanations, comments, or additional text
-
-# EXAMPLES
-Given objects ["6: desk", "13: laptop", "7: person", "2: coffee_table"]:
-Valid: [("13", "on_top_of", "6"), ("7", "next_to", "2")]
-Invalid: [("laptop", "on", "desk")] (wrong format)
-Invalid: [] with explanation (no explanations allowed)
-'''
-
-
-# system_prompt_edge_behaviour = '''
-# You are an agent specializing in identifying interactions in annotated images for 3D mapping and scene understanding.
-
-# In the images, each object is annotated with a bright numeric id (i.e. a number) and a corresponding colored contour outline. Your task is to analyze the images and output a list of tuples describing the physical relationships between objects. Format your response as follows: [("1", "relation type", "2"), ...]. When uncertain, return an empty list.
-
-# Note that you are describing the **behaviors or interactions** between the **objects annotated inside** the image. 
-
-# You will also be given a text list of the numeric ids of the objects in the image. The list will be in the format: ["1: name1", "2: name2", "3: name3" ...], only output the physical relationships between the objects in the list.
-
-# The interaction types you must report are:
-
-# - Object X (a person) is actively employing object Y (typically a tool, device, or interface): 'using'
-# - Object X (a person) is engaged in vocal communication directed towards object Y (another person or an interactive device): 'speaking_to'
-# - Object X (a person) is actively paying attention to sounds produced by or coming from object Y: 'listening_to'
-# - Object X (a person) is visually focusing on object Y for entertainment, information, or observation over a period: 'watching'
-# - Object X (a person) is in the process of preparing food using object Y (an appliance, utensil, or specific ingredient that is directly manipulated): 'cooking_with'
-# - Object X (a person) is grasping or supporting object Y with their hands or arms: 'holding'
-
-# An illustrative example of the expected response format using these behavior types might look like this, a list of tuples, assuming objects "7" (person1), "15" (television), "6" (chair), "10" (person2), "13" (laptop), "22" (cup):
-# [("7", "watching", "15"), ("10", "speaking_to", "7"), ("7", "using", "13"), ("10", "holding", "22")]
-
-# Do not include any other information, explanations, or introductory text in your response. Only output the Python-parsable list of tuples. When uncertain about any specific behavior between a pair of objects after careful analysis, do not include that specific tuple in your list. If, after careful analysis of the entire image, no behaviors from the list can be confidently determined between any pair of annotated objects, then return an empty list `[]`.
-# '''
-
-system_prompt_edge_behaviour = '''
-# ROLE
-You are a computer vision expert analyzing annotated images to extract behavioral interactions for 3D scene graph construction.
-
-# INPUT
-You will receive:
-1. An annotated image where each object has a bright numeric ID and colored contour outline
-2. A list of objects in format: ["1: object_name", "2: object_name"]
-
-# TASK
-Identify behavioral interactions between people and objects. Output a Python list of interaction tuples.
-
-# OUTPUT FORMAT
-[("person_id", "interaction_type", "target_id")]
-
-# INTERACTION TYPES
-Use exactly these interaction labels:
-
-1. **using**: Person actively manipulating/operating a tool, device, or interface
-2. **speaking_to**: Person directing verbal communication toward another person or device
-3. **listening_to**: Person attentively receiving audio from a source
-4. **watching**: Person visually engaged with content on a screen or observing activity
-5. **cooking_with**: Person actively preparing food using appliance, utensil, or ingredient
-6. **holding**: Person grasping or carrying an object with hands/arms
-
-# ANALYSIS RULES
-1. **Source Constraint**: First element in tuple MUST be a person's ID
-2. **Evidence Required**: Only include interactions with clear visual evidence
-3. **Body Language**: Analyze posture, head direction, eye gaze, hand positioning
-4. **Spatial Context**: Consider person's orientation relative to target objects
-5. **Specificity**: Choose most specific interaction type when multiple apply
-6. **Certainty**: Exclude ambiguous or unclear interactions
-
-# CONSTRAINTS
-- Only analyze objects from the provided list
-- Use exact numeric IDs from input
-- Return empty list [] if no clear interactions detected between person and objects    
-- Output must be valid Python syntax
-- No explanations, comments, or additional text
-
-# EXAMPLES
-Input: ["7: person", "15: television", "13: laptop", "22: cup"]
-✓ Valid: [("7", "watching", "15"), ("7", "using", "13")]
-✓ Valid: []
-✗ Invalid: [("7", "watching", "15"), ...] (no ellipsis allowed)
-✗ Invalid: [("television", "watched_by", "7")] (wrong source type)
-'''
+########
 
 # For captions
 system_prompt_captions = '''
@@ -267,12 +59,67 @@ Your response should be a JSON object with the format:
 Do not include any additional information in your response.
 '''
 
+system_prompt_spatial = '''
+# ROLE
+You are a meticulous 3D Scene Analyst specializing in geometric and physical relationships.
+
+# GOAL
+Your goal is to identify all fundamental spatial relationships between annotated objects in the provided 2D image. You will infer the 3D layout from this 2D perspective.
+
+# INPUT
+You will receive an annotated image and a list of object IDs and names.
+
+# OUTPUT
+You MUST output a JSON object that strictly adheres to the provided `SpatialResponse` JSON schema. Your entire output must be only the valid JSON object and nothing else.
+
+# ANALYSIS DIRECTIVES
+1.  **Camera Perspective is Key:** All directional relationships (`left_of`, `right_of`, `in_front_of`, `behind`) MUST be determined from the camera's primary viewpoint.
+2.  **Occlusion is Evidence:** Use object occlusion (which object partially hides another) as strong evidence for `in_front_of` and `behind`.
+3.  **Physical Support:** The `on_top_of` relationship requires clear evidence of physical support. An object floating above another is not `on_top_of` it.
+4.  **Certainty Over Quantity:** Do not guess. If a relationship is ambiguous or you are not confident, OMIT it from the list. It is better to have fewer, accurate relationships than many speculative ones.
+5.  **Completeness:** Systematically analyze all relevant pairs of objects from the provided list.
+'''
+
+# In vlm.py, replace the old system_prompt_edge_behaviour
+
+system_prompt_behaviour = '''
+# ROLE
+You are an expert analyst of human behavior and human-object interaction.
+
+# GOAL
+Your goal is to identify all active, intentional behavioral interactions between people and objects in the provided image.
+
+# INPUT
+You will receive an annotated image and a list of object IDs and names.
+
+# OUTPUT
+You MUST output a JSON object that strictly adheres to the provided `InteractionResponse` JSON schema. Your entire output must be only the valid JSON object and nothing else.
+
+# ANALYSIS DIRECTIVES
+1.  **Evidence is Paramount:** Base your analysis on clear visual evidence of interaction. This includes:
+    *   **Gaze Direction:** Where is the person looking?
+    *   **Posture & Orientation:** Is the person's body positioned to interact with the object?
+    *   **Hand Position:** Are they touching, holding, or gesturing towards the object?
+2.  **Action is Required:** The interaction must be an active behavior. A person simply being `next_to` a laptop is not `using` it unless there is evidence of active use (hands on keyboard, looking at the screen).
+3.  **Person-Centric Model:** The source of every interaction MUST be a person. You are describing what the person is doing.
+4.  **Certainty and Specificity:** If an interaction is ambiguous, omit it. Choose the most specific and accurate interaction type that the evidence supports.
+'''
+
 # system_prompt = system_prompt_only_top
 # system_prompt = system_prompt_edge_custom
-system_prompt = system_prompt_edge_behaviour
+# system_prompt = system_prompt_edge_behaviour
 
-# gpt_model = "gpt-4-vision-preview"
-gpt_model = "gpt-4o-2024-05-13"
+gpt_model = "gpt-4.1"
+# gpt_model = "gpt-4o-2024-05-13"
+
+InteractionType = [
+    "using", "speaking_to", "listening_to", "watching", "cooking_with", "holding"
+]
+
+SpatialType = [
+    "on_top_of", "under", "left_of", "right_of", 
+    "in_front_of", "behind", "next_to", "near"
+]
 
 def get_openai_client():
     client = OpenAI(
@@ -424,112 +271,174 @@ def vlm_extract_object_captions(text: str):
         print("No list of objects found in the text.")
         return []
     
+def parse_edge_id(edge_id_str: str) -> str:
+    edge_id_str = str(edge_id_str) if not isinstance(edge_id_str, str) else edge_id_str
+    try:
+        # Split, strip whitespace, and return
+        return edge_id_str.split(':')[0].strip()
+    except:
+        # If any error occurs (e.g., not a string), return the original
+        return edge_id_str
+
 def get_obj_rel_from_image_gpt4v(client: OpenAI, image_path: str, label_list: list):
-    # Getting the base64 string
+    """
+    REFACTORED FUNCTION
+    Extracts spatial relationships using the new `client.responses.create` endpoint.
+    """
     base64_image = encode_image_for_openai(image_path)
     
-    global system_prompt
-    global gpt_model
-    
-    user_query = f"Here is the list of labels for the annotations of the objects in the image: {label_list}. Please describe the spatial relationships between the objects in the image."
-    
-    
+    user_query = (f"Analyze the image using the provided object list and generate the required relationships "
+                  f"based on your instructions. Object list: {label_list}")
+
     vlm_answer = []
     try:
-        response = client.chat.completions.create(
-            model=f"{gpt_model}",
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}",
+        response = client.responses.create(
+            model=gpt_model,
+            input=[
+                {"role": "system", "content": system_prompt_spatial},
+                {"role": "user", "content": [
+                    {"type": "input_image", "image_url": f"data:image/jpeg;base64,{base64_image}"},
+                    {"type": "input_text", "text": user_query}
+                ]}
+            ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "extract_spatial_relationships",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "edges": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "source_id": {
+                                            "type": "string",
+                                            "description": "The numeric ID of the source object."},
+                                        "relationship_type": {
+                                            "type": "string",
+                                            "description": "The type of spatial relationship",
+                                            "enum": SpatialType,
+                                            },
+                                        "target_id": {
+                                            "type": "string",
+                                            "description": "The numeric ID of the target object."},
+                                    },
+                                    "required": ["source_id", "relationship_type", "target_id"],
+                                    "additionalProperties": False
+                                },
                             },
                         },
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": user_query
+                        "required": ["edges"],
+                        "additionalProperties": False
+                    },
+                    "strict": True
                 }
-            ]
+            }
         )
         
-        vlm_answer_str = response.choices[0].message.content
-        print(f"Line 113, vlm_answer_str: {vlm_answer_str}")
+        # Access the response content via `output_text`
+        response_content = response.output_text
+        print(f"{gpt_model} Response:\n{response_content}")
         
-        vlm_answer = extract_list_of_tuples(vlm_answer_str)
+        # Convert Pydantic objects to simple dicts for the final output
+        vlm_answer = json.loads(response_content).get('edges', [])
 
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        print(f"Setting vlm_answer to an empty list.")
+        print(f"An error occurred during API call or validation: {str(e)}")
         vlm_answer = []
-    print(f"Line 68, user_query: {user_query}")
-    print(f"Line 97, vlm_answer: {vlm_answer}")
-    
+
+    print(f"Final extracted spatial relationships: {vlm_answer}")
+
+    # Note: This function now returns a list of dictionaries, not a list of tuples.
+    for edge in vlm_answer:
+        if isinstance(edge, dict) and len(edge) == 3:
+            # Convert dict to tuple (id1, relation, id2)
+            edge_tuple = (parse_edge_id(edge['source_id']), edge['relationship_type'], parse_edge_id(edge['target_id']))
+            vlm_answer[vlm_answer.index(edge)] = edge_tuple
     
     return vlm_answer
-
 
 def get_behaviour_from_image_gpt4v(client: OpenAI, image_path: str, label_list: list):
 
     # Getting the base64 string
     base64_image = encode_image_for_openai(image_path)
     
-    global system_prompt
-    global gpt_model
+    global gpt_model, system_prompt_behaviour
     
-    user_query = f"Here is the list of labels for the annotations of the objects in the image: {label_list}. Please describe the behavioral interactions between objects in the image."
-    
-    
+    # user_query = f"Here is the list of labels for the annotated objects in the image: {label_list}. Please identify and describe the behavioral relations between objects as requested."
+    user_query = f"Analyze the image using the provided annotations of the objects list and generate the required relationships based on your instructions. Object list: {label_list}"
+
     vlm_answer = []
     try:
-        response = client.chat.completions.create(
-            model=f"{gpt_model}",
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}",
+        response = client.responses.create(
+            model=gpt_model,
+            input=[
+                {"role": "system", "content": system_prompt_behaviour},
+                {"role": "user", "content": [
+                    {"type": "input_image", "image_url": f"data:image/jpeg;base64,{base64_image}"},
+                    {"type": "input_text", "text": user_query}
+                ]}
+            ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "extract_spatial_relationships",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "edges": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "person_id": {
+                                            "type": "string",
+                                            "description": "The numeric ID of the person performing the behaviour."},
+                                        "behaviour_type": {
+                                            "type": "string",
+                                            "description": "The type of behaviour or interaction",
+                                            "enum": InteractionType,
+                                            },
+                                        "target_id": {
+                                            "type": "string",
+                                            "description": "The numeric ID of the target object being interacted with."},
+                                    },
+                                    "required": ["person_id", "behaviour_type", "target_id"],
+                                    "additionalProperties": False
+                                },
                             },
                         },
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": user_query
+                        "required": ["edges"],
+                        "additionalProperties": False
+                    },
+                    "strict": True
                 }
-            ]
+            }
         )
         
-        vlm_answer_str = response.choices[0].message.content
-        print(f"Line 113, vlm_answer_str: {vlm_answer_str}")
+        # Access the response content via `output_text`
+        response_content = response.output_text
+        print(f"{gpt_model} Response:\n{response_content}")
         
-        vlm_answer = extract_list_of_tuples(vlm_answer_str)
+        # Convert Pydantic objects to simple dicts for the final output
+        vlm_answer = json.loads(response_content).get('edges', [])
 
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        print(f"Setting vlm_answer to an empty list.")
+        print(f"An error occurred during API call or validation: {str(e)}")
         vlm_answer = []
-    print(f"Line 68, user_query: {user_query}")
-    print(f"Line 97, vlm_answer: {vlm_answer}")
-    
-    
-    return vlm_answer
 
+    print(f"Final extracted interactions / behaviours: {vlm_answer}")
+
+    # Note: This function now returns a list of dictionaries, not a list of tuples.
+    for edge in vlm_answer:
+        if isinstance(edge, dict) and len(edge) == 3:
+            # Convert dict to tuple (id1, relation, id2)
+            edge_tuple = (parse_edge_id(edge['person_id']), edge['behaviour_type'], parse_edge_id(edge['target_id']))
+            vlm_answer[vlm_answer.index(edge)] = edge_tuple
+
+    return vlm_answer
 
 def get_obj_captions_from_image_gpt4v(client: OpenAI, image_path: str, label_list: list):
     # Getting the base64 string
